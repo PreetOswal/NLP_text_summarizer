@@ -79,6 +79,10 @@ from transformers import (  # noqa: E402
 from transformers.utils import logging as hf_logging  # noqa: E402
 
 hf_logging.set_verbosity_error()
+logging.getLogger("httpx").setLevel(logging.WARNING)            #Updated later
+logging.getLogger("huggingface_hub").setLevel(logging.WARNING)  #Updated later
+logging.getLogger("datasets").setLevel(logging.WARNING)         #Updated later
+logging.getLogger("absl").setLevel(logging.WARNING)             #Updated later
 
 logging.basicConfig(
     level=logging.INFO,
