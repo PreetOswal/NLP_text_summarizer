@@ -104,6 +104,7 @@ class PipelineConfig:
     model_name: str = "t5-small"           # or facebook/bart-large-cnn, t5-base
     seed: int = 42
     device: Optional[str] = None           # auto-detected when None
+    input_file: Optional[str] = None
 
     # --- Data --------------------------------------------------------------
     dataset_name: str = "abisee/cnn_dailymail"
@@ -1155,6 +1156,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument("--model", default="t5-small",
                         help="HF model id: t5-small, t5-base, facebook/bart-large-cnn")
+    parser.add_argument("--input-file", default=None,
+                    help="Text file to summarize. If omitted, CNN/DailyMail is used.")
     parser.add_argument("--dataset", default="abisee/cnn_dailymail")
     parser.add_argument("--dataset-config", default="3.0.0")
     parser.add_argument("--num-samples", type=int, default=20,
@@ -1190,6 +1193,7 @@ def build_config(args: argparse.Namespace) -> PipelineConfig:
         seed=args.seed,
         device=args.device,
         dataset_name=args.dataset,
+        input_file=args.input_file,
         dataset_config=args.dataset_config,
         num_eval_samples=args.num_samples,
         num_train_samples=args.train_samples,
@@ -1227,17 +1231,56 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ]
     print(render_table(["Setting", "Value"], env_rows, align=["l", "l"]))
 
-    # --- 1. Data ------------------------------------------------------------
-    data_module = SummarizationDataModule(config)
-    samples = data_module.get_eval_samples()
-    if not samples:
-        LOGGER.error("No usable evaluation samples were produced. Aborting.")
-        return 1
+# --- 1. Data / Input File -----------------------------------------------
+    if config.input_file:
+        if not os.path.isfile(config.input_file):
+            LOGGER.error("Input file not found: %s", config.input_file)
+            return 1
 
+        with open(config.input_file, "r", encoding="utf-8") as f:
+            document = f.read()
+
+        document = clean_text(document)
+
+        if not document:
+            LOGGER.error("Input file is empty: %s", config.input_file)
+            return 1
+
+        samples = [{
+            "id": "custom",
+            "document": document,
+            "reference": "",
+        }]
+
+        LOGGER.info("Using custom text from file: %s", config.input_file)
+
+    else:
+        data_module = SummarizationDataModule(config)
+        samples = data_module.get_eval_samples()
+
+        if not samples:
+            LOGGER.error("No usable evaluation samples were produced. Aborting.")
+            return 1
     # --- 2. Abstractive model ----------------------------------------------
     abstractive = AbstractiveSummarizer(config)
-    data_module.tokenizer = abstractive.tokenizer
+    if not config.input_file:
+        data_module.tokenizer = abstractive.tokenizer
 
+    # --- Custom text mode --------------------------------------------------
+    if config.input_file:
+        document = samples[0]["document"]
+
+        print(banner("CUSTOM TEXT SUMMARIZATION"))
+        print("\n[SOURCE TEXT]")
+        print(document)
+
+        summary = abstractive.summarize(document)
+
+        print("\n[GENERATED SUMMARY]")
+        print(summary)
+
+        print(banner("DONE"))
+        return 0
     # --- 3. Optional fine-tuning -------------------------------------------
     if config.do_train:
         abstractive = finetune(config, abstractive)

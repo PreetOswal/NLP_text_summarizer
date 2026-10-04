@@ -31,7 +31,7 @@ if not exist "venv\Scripts\python.exe" (
 REM Activate virtual environment
 call venv\Scripts\activate.bat
 
-REM Install dependencies
+REM Install/check dependencies
 echo Installing/checking dependencies...
 python -m pip install -r requirements.txt
 
@@ -41,12 +41,26 @@ if errorlevel 1 (
     exit /b
 )
 
-REM Run project
 echo.
-echo Starting project...
+echo ========================================
+echo   Starting project...
+echo ========================================
 echo.
 
-python summarization_system.py --num-samples 2 --skip-long-demo
+REM Check for custom input file
+if exist "input.txt" (
+    echo input.txt found.
+    echo Running custom text summarization...
+    echo.
+
+    python summarization_system.py --input-file input.txt
+) else (
+    echo No input.txt found.
+    echo Running default CNN/DailyMail demo...
+    echo.
+
+    python summarization_system.py --num-samples 2 --skip-long-demo
+)
 
 echo.
 echo ========================================
